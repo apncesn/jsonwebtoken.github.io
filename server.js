@@ -1,47 +1,51 @@
-const express = require("express");
-const enforce = require("express-sslify");
-const languages = require("./libraries.json");
+const fs = require("fs");
+const { Octokit } = require("@octokit/rest");
 const dotenv = require("dotenv").config();
+const getLanguages = require("./views/website/libraries/support/get-languages.js");
+const octokit = new Octokit({
+    auth: process.env.GITHUB || process.env.GITHUB_TOKEN,
+});
 
-const app = express();
+function fetchGithubStars() {
+    const requests = [];
+    const languages = getLanguages();
 
-app.set("view engine", "pug");
-app.set("views", __dirname + "/views/website");
+    console.log("----------------------");
+    console.log("Fetching GitHub Data");
+    console.log("----------------------");
 
-if (process.env.NODE_ENV === "production") {
-    console.log("Redirecting to TLS endpoint.");
-    app.use(
-        enforce.HTTPS({
-            // Required for proper use under a reverse proxy (Heroku, etc.).
-            trustProtoHeader: true,
-        })
-    );
+    languages.forEach((language) => {
+        language.libs.forEach((lib) => {
+            if (lib.gitHubRepoPath) {
+                const owner = lib.gitHubRepoPath.split("/")[0];
+                const repo = lib.gitHubRepoPath.split("/")[1];
+                requests.push(
+                    octokit.repos
+                    .get({
+                        owner,
+                        repo,
+                    })
+                    .then((repo) => {                                                                                                           console.log(
+                            "Stars",
+                            lib.gitHubRepoPath,
+                            repo.data.stargazers_count
+                        );
+
+                        lib.stars = repo.data.stargazers_count;
+                        return repo.data.stargazers_count;
+                    })
+                    .catch((error) => console.log(error))
+                );
+            }
+        });
+    });
+
+    Promise.all(requests).then(() => {
+        console.log("----------------------");
+        console.log("Writing libraries.json");
+        console.log("----------------------");
+         fs.writeFileSync(`${__dirname}/libraries.json`, JSON.stringify(languages));
+    });
 }
 
-app.use((req, res, next) => {
-    res.locals.COOKIE_CONSENT_DOMAIN_ID = process.env.COOKIE_CONSENT_DOMAIN_ID;
-    next();
-});
-app.use(express.static("dist/website"));
-app.get("/", function(req, res) {
-    res.render("index");
-});
-
-app.get("/introduction", function(req, res) {
-    res.render("introduction");
-});
-
-app.get("/libraries", function(req, res) {
-    res.render("libraries", {
-        languages: languages
-    });
-});
-
-// Fallback for the homepage JWT handbook CTA A/B experiment we ran
-app.get("/home", function(req, res) {
-    res.redirect("/");
-});
-
-app.listen(process.env.PORT || 3000, function() {
-    console.log("Started.");
-});
+fetchGithubStars();

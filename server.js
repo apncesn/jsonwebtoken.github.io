@@ -1,8 +1,13 @@
 const express = require("express");
 const enforce = require("express-sslify");
-const languages = require("./libraries.json");
-const dotenv = require("dotenv").config();
+const fs = require('fs');
+const { Octokit } = require("@octokit/rest");
+require('dotenv').config(); // Charger les variables d'environnement depuis le fichier .env
 
+const octokit = new Octokit({
+  auth: process.env.GITHUB_TOKEN, // Utiliser le jeton d'accès personnel
+});
+const languages = require("./libraries.js");
 const app = express();
 
 app.set("view engine", "pug");
@@ -40,7 +45,7 @@ app.get("/libraries", function(req, res) {
 // Fallback for the homepage JWT handbook CTA A/B experiment we ran
 app.get("/home", function(req, res) {
     res.redirect("/");
-});
+    });
 
 app.listen(process.env.PORT || 3000, function() {
     console.log("Started.");
